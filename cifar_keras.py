@@ -3,12 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tensorflow.keras.datasets import cifar100
-from tensorflow.keras import models
-from keras.models import model_from_json
+from tensorflow.keras.optimizers import SGD
+from keras.models import Sequential, model_from_json, save_model
 from keras.utils import np_utils
 from keras.layers.core import Dense, Dropout, Activation, Flatten
-from keras.layers.convolutional import Conv2D, MaxPooling2D, ZeroPadding2D
-from keras.layers.normalization import BatchNormalization
+from keras.layers import Conv2D, MaxPooling2D, ZeroPadding2D
+from keras.layers.normalization import BatchNormalization, LayerNormalization
 
 config = tf.compat.v1.ConfigProto(gpu_options = 
                          tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.8)
@@ -42,68 +42,52 @@ superclass_labels = [['beaver', 'dolphin', 'otter', 'seal', 'whale'],
               ['lawn_mower', 'rocket', 'streetcar', 'tank', 'tractor']]
 superclass_labels = np.sort(np.concatenate(superclass_labels, axis=0))
 
-"""
-# display samples from 
-plt.figure(figsize=(10,10))
-for i in range(25):
-    plt.subplot(5,5,i+1)
-    plt.xticks([])
-    plt.yticks([])
-    plt.grid(False)
-    plt.imshow(train_images[i], cmap=plt.cm.binary)
-    plt.xlabel(superclass_labels[train_labels[i][0]])
-plt.show()
-"""
-alexnet = models.Sequential()
+alexnet = Sequential()
 
 # conv 1
-alexnet.add(Conv2D(96, (11, 11), input_shape=(32, 32, 3), padding='same', strides=(4,4)))
-alexnet.add(BatchNormalization())
-alexnet.add(Activation('relu'))
+alexnet.add(Conv2D(filters=96, kernel_size=(11, 11), input_shape=(32, 32, 3), padding='same', strides=(4,4), activation='relu'))
+alexnet.add(LayerNormalization())
 # maxpool 1
 alexnet.add(MaxPooling2D(pool_size=(3, 3), strides=(2,2), padding='valid'))
 # conv 2
 alexnet.add(ZeroPadding2D((2, 2)))
-alexnet.add(Conv2D(256, (5, 5), padding='same', strides=(1,1)))
+alexnet.add(Conv2D(filters=256, kernel_size=(5, 5), padding='same', strides=(1,1), activation='relu'))
 alexnet.add(BatchNormalization())
-alexnet.add(Activation('relu'))
 # maxpool 2
 alexnet.add(MaxPooling2D(pool_size=(3, 3), strides=(2,2), padding='valid'))
 # conv 3
 alexnet.add(ZeroPadding2D((1, 1)))
-alexnet.add(Conv2D(384, (3, 3), padding='same', strides=(1,1)))
-alexnet.add(BatchNormalization())
-alexnet.add(Activation('relu'))
+alexnet.add(Conv2D(filters=384, kernel_size=(3, 3), padding='same', strides=(1,1), activation='relu'))
+alexnet.add(LayerNormalization())
 # conv 4
 alexnet.add(ZeroPadding2D((1, 1)))
-alexnet.add(Conv2D(384, (3, 3), padding='same', strides=(1,1)))
+alexnet.add(Conv2D(filters=384, kernel_size=(3, 3), padding='same', strides=(1,1), activation='relu'))
 alexnet.add(BatchNormalization())
-alexnet.add(Activation('relu'))
 # conv 5
 alexnet.add(ZeroPadding2D((1, 1)))
-alexnet.add(Conv2D(256, (3, 3), padding='same', strides=(1,1)))
+alexnet.add(Conv2D(filters=256, kernel_size=(3, 3), padding='same', strides=(1,1), activation='relu'))
 alexnet.add(BatchNormalization())
-alexnet.add(Activation('relu'))
 # maxpool 5
 alexnet.add(MaxPooling2D(pool_size=(3, 3), strides=(2,2), padding='valid'))
 # flattening
 alexnet.add(Flatten())
 # fc 6
-alexnet.add(Dense(4096))
+alexnet.add(Dense(4096, activation='relu'))
 alexnet.add(BatchNormalization())
-alexnet.add(Activation('relu'))
 alexnet.add(Dropout(0.5))
 # fc 7
-alexnet.add(Dense(4096))
+alexnet.add(Dense(4096,activation='relu'))
 alexnet.add(BatchNormalization())
-alexnet.add(Activation('relu'))
 alexnet.add(Dropout(0.5))
 # fc 8
 alexnet.add(Dense(100))
-alexnet.add(BatchNormalization())
 alexnet.add(Activation('softmax'))
 
-alexnet.compile(optimizer='adam',
+alexnet.build(input_shape=(32, 32, 3))
+alexnet.summary()
+alexnet_json = alexnet.to_json()
+
+alexnet.compile(optimizer=SGD(learning_rate=0.01, momentum=0.9),
               loss='categorical_crossentropy',
               metrics=['accuracy'])
 
@@ -117,7 +101,11 @@ test_labels = np_utils.to_categorical(test_labels, 100)
 history = alexnet.fit(train_images, train_labels, batch_size=25, epochs=10, 
                     validation_data=(test_images, test_labels))
 
-alexnet.summary()
+test_loss, test_acc = alexnet.evaluate(test_images, test_labels, verbose=0)
+
+with open("alexnet.json", "w") as json_file:
+    json_file.write(alexnet_json)
+alexnet.save_weights("alexnet.h5")
 
 plt.plot(history.history['accuracy'], label='Train accuracy')
 plt.plot(history.history['val_accuracy'], label = 'Validation accuracy')
@@ -125,8 +113,4 @@ plt.xlabel('Epoch')
 plt.ylabel('Accuracy')
 plt.ylim([0, 1])
 plt.legend(loc='lower left')
-
-test_loss, test_acc = alexnet.evaluate(test_images, test_labels, verbose=0)
-print(test_acc)
-
 plt.show()
